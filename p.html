@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<title>AV3 - Álgebra Linear - Ranking HITS</title>
+
+<style>
+    body {
+        font-family: "Segoe UI", Arial, sans-serif;
+        background: #eef1f7;
+        margin: 0;
+        padding: 0;
+    }
+
+    header {
+        background: #1c3b70;
+        color: white;
+        padding: 25px;
+        text-align: center;
+        box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+    }
+
+    header h1 {
+        margin: 0;
+        font-size: 28px;
+    }
+
+    header p {
+        margin: 5px 0 0;
+        font-size: 16px;
+    }
+
+    .container {
+        background: white;
+        margin: 30px auto;
+        padding: 25px;
+        max-width: 850px;
+        border-radius: 8px;
+        box-shadow: 0 0 10px rgba(0,0,0,0.15);
+    }
+
+    h2 {
+        color: #1c3b70;
+        margin-top: 0;
+    }
+
+    select, button {
+        padding: 10px;
+        font-size: 15px;
+        margin-top: 10px;
+        border-radius: 6px;
+        border: 1px solid #778;
+    }
+
+    button {
+        cursor: pointer;
+        background: #1c3b70;
+        color: white;
+        transition: 0.2s;
+    }
+
+    button:hover {
+        background: #14294e;
+    }
+
+    table {
+        width: 100%;
+        margin-top: 20px;
+        border-collapse: collapse;
+        font-size: 16px;
+    }
+
+    th, td {
+        border: 1px solid #444;
+        padding: 10px;
+        text-align: center;
+    }
+
+    th {
+        background: #dde3ef;
+    }
+
+    footer {
+        text-align: center;
+        padding: 15px;
+        margin-top: 30px;
+        background: #1c3b70;
+        color: white;
+        font-size: 14px;
+    }
+
+</style>
+</head>
+
+<body>
+
+<header>
+    <h1>AV3 – Álgebra Linear</h1>
+    <p><strong>Professor:</strong> Osvaldo Fernandes</p>
+    <p><strong>Alunos:</strong> Lucas Dian Coelho e João Pedro Carvalho</p>
+</header>
+
+<div class="container">
+
+    <h2>Sistema de Ranking – Algoritmo HITS</h2>
+
+    <label><strong>Escolha a matriz da questão:</strong></label><br>
+
+    <select id="questao">
+        <option value="Questão 6">Questão 6</option>
+        <option value="Questão 7">Questão 7</option>
+        <option value="Questão 8">Questão 8</option>
+    </select>
+
+    <button onclick="calcular()">Calcular Ranking</button>
+
+    <div id="resultado"></div>
+
+</div>
+
+<footer>
+    Trabalho acadêmico – AV3 de Álgebra Linear – 2025
+</footer>
+
+<script>
+// -----------------------------------------------------------
+// MATRIZES DO TRABALHO (BANCO DE QUESTÕES)
+// -----------------------------------------------------------
+
+const BANCO_DE_QUESTOES = {
+    "Questão 6": [
+        [0, 1, 1, 0],
+        [0, 0, 1, 0], 
+        [1, 0, 0, 1],
+        [1, 0, 0, 0]  
+    ],
+    
+    "Questão 7": [
+        [0, 1, 1, 1, 0], 
+        [1, 0, 0, 0, 1],
+        [0, 0, 0, 0, 1],
+        [0, 1, 0, 0, 0],
+        [0, 1, 1, 0, 0]
+    ],
+
+    "Questão 8": [
+        [0, 1, 1, 0, 1, 1, 0, 0, 0, 1],
+        [0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+        [0, 1, 1, 0, 0, 1, 1, 0, 0, 1],
+        [0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+        [0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
+        [0, 0, 0, 0, 0, 1, 0, 0, 0, 0],
+        [0, 1, 1, 0, 0, 1, 0, 1, 0, 1],
+        [0, 0, 0, 0, 0, 1, 0, 0, 0, 0]
+    ]
+};
+
+const TOLERANCIA = 1e-5;
+
+// -----------------------------------------------------------
+// FUNÇÕES DO ALGORITMO HITS
+// -----------------------------------------------------------
+
+function transposta(matriz) {
+    return matriz[0].map((_, colIndex) => matriz.map(row => row[colIndex]));
+}
+
+function multiplicarMatrizVetor(matriz, vetor) {
+    return matriz.map(row => 
+        row.reduce((soma, valor, i) => soma + (valor * vetor[i]), 0)
+    );
+}
+
+function calcularNorma(vetor) {
+    return Math.sqrt(vetor.reduce((soma, val) => soma + (val * val), 0));
+}
+
+function normalizar(vetor) {
+    const norma = calcularNorma(vetor);
+    if (norma === 0) return vetor;
+    return vetor.map(val => val / norma);
+}
+
+function calcularErro(v1, v2) {
+    let somaDiff = 0;
+    for (let i = 0; i < v1.length; i++) {
+        somaDiff += (v1[i] - v2[i]) ** 2;
+    }
+    return Math.sqrt(somaDiff);
+}
+
+function resolverRanking(nomeQuestao, matrizAdjacencia) {
+    const n = matrizAdjacencia.length;
+    const AT = transposta(matrizAdjacencia);
+    
+    let vetorAutoridade = new Array(n).fill(1);
+    vetorAutoridade = normalizar(vetorAutoridade);
+    
+    let erro = 1.0;
+    let iteracoes = 0;
+
+    while (erro > TOLERANCIA) {
+        iteracoes++;
+        let anterior = [...vetorAutoridade];
+
+        let hubs = multiplicarMatrizVetor(matrizAdjacencia, vetorAutoridade);
+        let novaAutoridade = multiplicarMatrizVetor(AT, hubs);
+        
+        vetorAutoridade = normalizar(novaAutoridade);
+
+        erro = calcularErro(vetorAutoridade, anterior);
+
+        if (iteracoes > 1000) break;
+    }
+
+    return {
+        nome: nomeQuestao,
+        iteracoes,
+        ranking: vetorAutoridade
+            .map((score, i) => ({ id: i + 1, score }))
+            .sort((a, b) => b.score - a.score)
+    };
+}
+
+// -----------------------------------------------------------
+// ATUALIZA A INTERFACE
+// -----------------------------------------------------------
+
+function calcular() {
+    const nome = document.getElementById("questao").value;
+    const matriz = BANCO_DE_QUESTOES[nome];
+    const resultado = resolverRanking(nome, matriz);
+
+    let html = `
+        <h2>Resultado – ${resultado.nome}</h2>
+        <p><strong>Iterações até convergência:</strong> ${resultado.iteracoes}</p>
+
+        <table>
+            <tr>
+                <th>Posição</th>
+                <th>Site</th>
+                <th>Peso (Autoridade)</th>
+            </tr>
+    `;
+
+    resultado.ranking.forEach((item, index) => {
+        html += `
+            <tr>
+                <td>${index + 1}º</td>
+                <td>Site ${item.id}</td>
+                <td>${item.score.toFixed(6)}</td>
+            </tr>
+        `;
+    });
+
+    html += "</table>";
+
+    document.getElementById("resultado").innerHTML = html;
+}
+
+</script>
+
+</body>
+</html>
